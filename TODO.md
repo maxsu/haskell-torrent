@@ -68,6 +68,8 @@ wish-list.
    - Let Piece Sets be S.Set PieceNum rather than [PieceNum]. They are
      larger than 1000 for some large torrents, so it makes sense to shift to
      a better representation.
+   - Cleanup the code around ChokeMgrP.advancePeerChain. It currently does a
+     lot of stuff it doesn't have to do.
 
 Known Bugs
 ----------
@@ -84,11 +86,12 @@ Before releasing into the "wild"
    - We currently take space proportional to torrent size due to our SHA1
      calculation being slow and not use a file descriptor. Research into a
      faster SHA1 library would be really beneficial.
-   - Handle Endgame. Endgame is nasty but necessary.
-     Here is the list of what to do:
-        * Enable handling of CANCEL messages from the ChokeMgr in Peers.
-        * When peer completes a block, broadcast CANCEL messages through
-          ChokeMgrP
+   - Eliminate fromJust from the code. There is something wrong at some
+     place.
+   - Perform an audit of the ChokeMgr code.
+   - Make sure we actually seed when the torrent finishes.
+   - Check that the tracker is told about what happened.
+   - When we complete a torrent, tell the tracker.
 
 Items for later (no particular order)
 -------------------------------------
