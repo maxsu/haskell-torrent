@@ -82,10 +82,14 @@ Before releasing into the "wild"
    - We currently take space proportional to torrent size due to our SHA1
      calculation being slow and not use a file descriptor. Research into a
      faster SHA1 library would be really beneficial.
-   - Perform an audit of the ChokeMgr code.
    - Make sure we actually seed when the torrent finishes.
    - Check that the tracker is told about what happened.
    - When we complete a torrent, tell the tracker.
+   - What about reentrancy and FFI OpenSSL calls?
+   - When entering the endgame, change the strategy for filling up pieces.
+   - Handle the following bug:
+            "The 'impossible' happened, are you implementing endgame?"
+     in PieceMgrP. We basically want to figure out what should happen.
 
 Items for later (no particular order)
 -------------------------------------
