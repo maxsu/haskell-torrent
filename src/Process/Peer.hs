@@ -1,6 +1,6 @@
 -- | Peer proceeses
 {-# LANGUAGE ScopedTypeVariables #-}
-module PeerP (
+module Process.Peer (
     -- * Types
       PeerMessage(..)
     -- * Interface
@@ -18,8 +18,6 @@ import Prelude hiding (catch, log)
 import Data.Bits
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
--- import Data.ByteString.Parser hiding (isEmpty)
-import qualified Data.Serialize as S
 import qualified Data.Serialize.Get as G
 
 import qualified Data.Map as M
@@ -36,15 +34,15 @@ import System.IO
 import PeerTypes
 import Process
 import Logging
-import FSP
-import PieceMgrP
-import qualified Queue as Q
+import Process.FS
+import Process.PieceMgr
+import qualified Data.Queue as Q
 import RateCalc as RC
-import StatusP
+import Process.Status
 import Supervisor
-import TimerP
+import Process.Timer as Timer
 import Torrent
-import WireProtocol
+import Protocol.Wire
 
 -- INTERFACE
 ----------------------------------------------------------------------
@@ -268,7 +266,7 @@ peerP pMgrC pieceMgrC fsC pm logC nPieces h outBound inBound sendBWC statC supC 
 	    syncP =<< (sendPC outCh $ SendQMsg $ BitField (constructBitField nPieces pieces))
 	    -- Install the StatusP timer
 	    c <- asks timerCh
-	    TimerP.register 30 () c
+	    Timer.register 30 () c
 	    foreverP (recvEvt)
 	cleanup = do
 	    t <- liftIO myThreadId
@@ -309,7 +307,7 @@ peerP pMgrC pieceMgrC fsC pm logC nPieces h outBound inBound sendBWC statC supC 
 	    wrapP evt (\() -> do
 		logDebug "TimerEvent"
 	        tch <- asks timerCh
-		TimerP.register 30 () tch
+		Timer.register 30 () tch
 		ur <- gets upRate
 		dr <- gets downRate
 		let (upCnt, nuRate) = RC.extractCount $ ur
