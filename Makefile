@@ -1,4 +1,4 @@
-.PHONY: build clean rebuild local-install haddock hlint etags ctags conf dist-rebuild conf-nodebug
+.PHONY: build clean rebuild local-install haddock hlint tags conf dist-rebuild conf-nodebug
 build:
 	runghc Setup.lhs build
 
@@ -22,11 +22,8 @@ haddock:
 	runghc Setup.lhs haddock --executables
 
 hlint:
-	hlint src/*.hs
+	hlint src
 
-etags:
-	hasktags --etags src/*.hs
-
-ctags:
-	hasktags --ctags src/*.hs
+tags:
+	hasktags --both $$(find src -type f -name '*.*hs')
 
