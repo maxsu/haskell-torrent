@@ -31,15 +31,7 @@ wish-list.
      consider pieces we already have once and we get a faster system.
 
      When doing this, only prune pieces which are done and checked.
-
-   - The StatusP process is always fed static data. Feed it the correct data
-     based on the current status: Are we a leecher or a seeder? And how much
-     data is there left to download before we have the full file?
-
-     (Hint: grep for canSeed and use the missingMap and pieceMap for the 'left'
-      data)
    - Send keepalives every two minutes as per the spec.
-   - Make git.md into a markdown document
    - For the histogram code, look at
      [Data.PSQueue](http://hackage.haskell.org/packages/archive/PSQueue/1.1/doc/html/Data-PSQueue.html). Ralf
       Hinze has a paper on that at [Hinze, R., A Simple Implementation
@@ -47,16 +39,12 @@ wish-list.
    - Consider letting the supervisors support monitoring of processes. Use this to reimplement parts
      of the PeerMgr code.
    - Update the Seeder status in PeerMgrP.
-   - When stopping a Peer, put back the Pieces to the Piece Manager.
    - Do not send HAVE messages if the Peer already has the Piece Number.
    - Improve on the command line parser. We will certainly need full-fledged
      CL parsing at some point.
-   - When closing, gracefully tell the tracker about it.
    - Let Piece Sets be S.Set PieceNum rather than [PieceNum]. They are
      larger than 1000 for some large torrents, so it makes sense to shift to
      a better representation.
-   - Cleanup the code around ChokeMgrP.advancePeerChain. It currently does a
-     lot of stuff it doesn't have to do.
    - The status reporting code needs some help. It only transfers up/down
      rates once every 30 seconds. If a peer is living for less than 30
      seconds, then no upload/download will be reported for that peer. The
@@ -65,12 +53,26 @@ wish-list.
    - Make sure we actually seed when the torrent finishes.
      Rather hard to check with the current construction in the PeerMgr. The
      PeerMgr needs more work before this is possible.
+   - Use an mmap() based interface for file I/O.
+
+Planned for the next release
+----------------------------
+
+   - When closing, gracefully tell the tracker about it.
+   - Reduce CPU load and memory load. Alternative representations of various
+     data structures are needed.
+   - Improve parallel execution. We are currently extremely synchronous.
+   - Listen socket, this is needed to be fully BEP003 compliant. With it in
+     place, we will be able to accept incoming connections as well as
+     outgoing connections.
+   - KeepAlive messages on sockets.
+   - Improve the Peer Management code. Keep track of peers and process them
+     over time in an intelligent manner.
 
 Items for later (no particular order)
 -------------------------------------
 
-   - Improve parallel execution. We are currently extremely synchronous.
-   - Reduce CPU load and memory load.
+   - Add restart-support to the supervisors where applicable.
    - Add support for multiple torrents at once
    - Add prioritization support of multiTorrents
    - Implement a scraper on trackers
@@ -88,8 +90,6 @@ Items for later (no particular order)
    - Azureus/Vuze has a keepalive flood detector built-in. Consider if this
      is relevant for this client.
    - Process monitoring in general. Think.
-   - We need to accept incoming connections. The system only connects
-     outward at the moment
    - Write a fuzzing framework for bittorrent.
 
 # vim: filetype=none tw=76 expandtab
