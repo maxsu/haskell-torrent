@@ -213,14 +213,14 @@ constructBitField sz pieces = L.pack . build $ m
 -- -- TESTS
 
 testSuite = testGroup "Protocol/Wire"
-  [ testCase "encode/decode" testDecodeEncodeProp1 ]
+  $ map testProp (zip [0..] testData)
 
-testDecodeEncodeProp1 :: Assertion
-testDecodeEncodeProp1 =
-    let encoded = encode testData
+testProp (n, m) = testCase ("Test " ++ show n) $
+    let encoded = encode m
         decoded = decode encoded
-    in
-        assertEqual "for encode/decode identity" (Right testData) decoded
+    in case decoded of
+          Left err -> assertFailure err
+          Right x  -> assertEqual ("for " ++ show m) x m
 
 -- Prelude.map testDecodeEncodeProp1 
 testData = [ KeepAlive
@@ -234,6 +234,7 @@ testData = [ KeepAlive
            , BitField (L.pack [1,2,3])
            , Request 123 (Block 4 7)
            , Piece 5 7 (B.pack [1,2,3,4,5,6,7,8,9,0])
+           , Piece 5 7 (B.pack (concat . replicate 30 $ [minBound..maxBound]))
            , Cancel 5 (Block 6 7)
            , Port 123
            ]
