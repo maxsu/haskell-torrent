@@ -55,6 +55,8 @@ wish-list.
      PeerMgr needs more work before this is possible.
    - Use an mmap() based interface for file I/O.
    - Use hslogger or similar as a logging backend.
+   - Eliminiate use of nPieces in PeerP. It can be extracted from the 'pm'
+     value.
 
 Planned for the next release
 ----------------------------
@@ -63,9 +65,6 @@ Planned for the next release
    - Reduce CPU load and memory load. Alternative representations of various
      data structures are needed.
    - Improve parallel execution. We are currently extremely synchronous.
-   - Listen socket, this is needed to be fully BEP003 compliant. With it in
-     place, we will be able to accept incoming connections as well as
-     outgoing connections.
    - KeepAlive messages on sockets.
    - Improve the Peer Management code. Keep track of peers and process them
      over time in an intelligent manner.
