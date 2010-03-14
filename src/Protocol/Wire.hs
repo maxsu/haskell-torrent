@@ -19,6 +19,7 @@ where
 
 import Control.Applicative hiding (empty)
 import Control.Monad
+import Control.DeepSeq
 
 import Data.Monoid
 import qualified Data.ByteString as B
@@ -56,6 +57,9 @@ data Message = KeepAlive
              | Port Integer
   deriving (Eq, Show)
 
+instance NFData Message where
+    rnf a = a `seq` ()
+
 instance Arbitrary Message where
     arbitrary = oneof [return KeepAlive, return Choke, return Unchoke, return Interested,
                        return NotInterested,
@@ -88,7 +92,7 @@ p32be :: Integral a => a -> Put
 p32be = putWord32be . fromIntegral
 
 decodeMsg :: Get Message
-decodeMsg = get
+decodeMsg = {-# SCC "decodeMsg" #-} get
 
 encodePacket :: Message -> B.ByteString
 encodePacket m = mconcat [szEnc, mEnc]
@@ -118,6 +122,8 @@ instance Serialize Message where
        <|> getPiece   <|> getCancel
        <|> getPort
 
+getBF, getChoke, getUnchoke, getIntr, getNI, getHave, getReq :: Get Message
+getPiece, getCancel, getPort, getKA :: Get Message
 getChoke   = byte 0 *> return Choke
 getUnchoke = byte 1 *> return Unchoke
 getIntr    = byte 2 *> return Interested
@@ -249,7 +255,7 @@ constructBitField sz pieces = L.pack . build $ m
 
 --
 -- -- TESTS
-
+testSuite :: Test
 testSuite = testGroup "Protocol/Wire"
   [ testProperty "QC encode-decode/id" propEncodeDecodeId]
 

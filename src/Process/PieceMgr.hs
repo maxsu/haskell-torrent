@@ -11,7 +11,9 @@ where
 
 
 import Control.Concurrent
-import Control.Concurrent.CML
+import Control.Concurrent.CML.Strict
+import Control.DeepSeq
+
 import Control.Monad.State
 import Data.List
 import qualified Data.ByteString as B
@@ -48,6 +50,7 @@ data PieceDB = PieceDB
     , downloading   :: [(PieceNum, Block)]    -- ^ Blocks we are currently downloading
     , infoMap       :: PieceMap   -- ^ Information about pieces
     , endGaming     :: Bool       -- ^ If we have done any endgame work this is true
+    , assertCount   :: Int        -- ^ When to next check the database for consistency
     } deriving Show
 
 -- | The InProgressPiece data type describes pieces in progress of being downloaded.
@@ -73,6 +76,9 @@ data InProgressPiece = InProgressPiece
 data Blocks = Leech [(PieceNum, Block)]
             | Endgame [(PieceNum, Block)]
 
+instance NFData Blocks where
+  rnf a = a `seq` ()
+
 -- | Messages for RPC towards the PieceMgr.
 data PieceMgrMsg = GrabBlocks Int IS.IntSet (Channel Blocks)
                    -- ^ Ask for grabbing some blocks
@@ -85,10 +91,18 @@ data PieceMgrMsg = GrabBlocks Int IS.IntSet (Channel Blocks)
                  | GetDone (Channel [PieceNum])
                    -- ^ Get the pieces which are already done
 
+instance NFData PieceMgrMsg where
+    rnf a = case a of
+              (GrabBlocks _ is _) -> rnf is
+              a                   -> a `seq` ()
+
 data ChokeInfoMsg = PieceDone PieceNum
                   | BlockComplete PieceNum Block
                   | TorrentComplete
     deriving (Eq, Show)
+
+instance NFData ChokeInfoMsg where
+  rnf a = a `seq` ()
 
 type PieceMgrChannel = Channel PieceMgrMsg
 type ChokeInfoChannel = Channel ChokeInfoMsg
@@ -108,6 +122,7 @@ type PieceMgrProcess v = Process PieceMgrCfg PieceDB v
 start :: PieceMgrChannel -> FSPChannel -> ChokeInfoChannel -> StatusChan -> PieceDB
       -> SupervisorChan -> IO ThreadId
 start mgrC fspC chokeC statC db supC =
+    {-# SCC "PieceMgr" #-}
     spawnP (PieceMgrCfg mgrC fspC chokeC statC) db
                     (catchP (forever pgm)
                         (defaultStopHandler supC))
@@ -184,7 +199,7 @@ start mgrC fspC chokeC statC db supC =
 ----------------------------------------------------------------------
 
 createPieceDb :: PiecesDoneMap -> PieceMap -> PieceDB
-createPieceDb mmap pmap = PieceDB pending done [] M.empty [] pmap False
+createPieceDb mmap pmap = PieceDB pending done [] M.empty [] pmap False 0
   where pending = filt (==False)
         done    = filt (==True)
         filt f  = IS.fromList . M.keys $ M.filter f mmap
@@ -290,7 +305,7 @@ blockPiece blockSz pieceSize = build pieceSize 0 []
 --   pair @(blocks, db')@, where @blocks@ are the blocks it picked and @db'@ is the resulting
 --   db with these blocks removed.
 grabBlocks' :: Int -> IS.IntSet -> PieceMgrProcess Blocks
-grabBlocks' k eligible = do
+grabBlocks' k eligible = {-# SCC "grabBlocks'" #-} do
     blocks <- tryGrabProgress k eligible []
     pend <- gets pendingPieces
     if blocks == [] && IS.null pend
@@ -356,7 +371,12 @@ grabBlocks' k eligible = do
             where cBlock = blockPiece defaultBlockSize . fromInteger . len
 
 assertPieceDB :: PieceMgrProcess ()
-assertPieceDB = assertSets >> assertInProgress >> assertDownloading
+assertPieceDB = {-# SCC "assertPieceDB" #-} do
+    c <- gets assertCount
+    if c == 0
+        then do modify (\db -> db { assertCount = 10 })
+                assertSets >> assertInProgress >> assertDownloading
+        else modify (\db -> db { assertCount = assertCount db - 1 })
   where
     -- If a piece is pending in the database, we have the following rules:
     --

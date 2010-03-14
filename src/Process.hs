@@ -36,7 +36,8 @@ module Process (
 where
 
 import Control.Concurrent
-import Control.Concurrent.CML
+import Control.Concurrent.CML.Strict
+import Control.DeepSeq
 import Control.Exception
 
 import Control.Monad.Reader
@@ -110,20 +111,20 @@ syncP ev = do (a, s) <- liftIO $ sync ev
               put s
               return a
 
-sendP :: Channel c -> c -> Process a b (Event ((), b))
+sendP :: NFData c => Channel c -> c -> Process a b (Event ((), b))
 sendP ch v = do
     s <- get
     return $ (wrap (transmit ch v)
                 (\() -> return ((), s)))
 
-sendPC :: (a -> Channel c) -> c -> Process a b (Event ((), b))
+sendPC :: NFData c => (a -> Channel c) -> c -> Process a b (Event ((), b))
 sendPC sel v = asks sel >>= flip sendP v
 
 recvP :: Channel c -> (c -> Bool) -> Process a b (Event (c, b))
 recvP ch pred = do
-  s <- get
-  return (wrap (receive ch pred)
-            (\v -> return (v, s)))
+    s <- get
+    return (wrap (receive ch pred)
+              (\v -> return (v, s)))
 
 recvPC :: (a -> Channel c) -> Process a b (Event (c, b))
 recvPC sel = asks sel >>= flip recvP (const True)

@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 module Process.ChokeMgr (
     -- * Types, Channels
       ChokeMgrChannel
@@ -14,7 +15,8 @@ import qualified Data.Set as S
 import Data.Traversable as T
 
 import Control.Concurrent
-import Control.Concurrent.CML
+import Control.Concurrent.CML.Strict
+import Control.DeepSeq
 import Control.Monad.Reader
 import Control.Monad.State
 
@@ -36,6 +38,10 @@ import Process.Timer as Timer
 data ChokeMgrMsg = Tick
                  | RemovePeer PeerPid
                  | AddPeer PeerPid PeerChannel
+
+instance NFData ChokeMgrMsg where
+  rnf a = a `seq` ()
+
 type ChokeMgrChannel = Channel ChokeMgrMsg
 
 data CF = CF { mgrCh :: ChokeMgrChannel
@@ -59,7 +65,7 @@ start ch infoC ur weSeed supC = do
               (defaultStopHandler supC))
   where
     initPeerDB slots = PeerDB 2 weSeed slots M.empty []
-    pgm = do chooseP [mgrEvent, infoEvent] >>= syncP
+    pgm = {-# SCC "ChokeMgr" #-} do chooseP [mgrEvent, infoEvent] >>= syncP
     mgrEvent =
           recvWrapPC mgrCh
             (\msg -> case msg of
@@ -316,6 +322,7 @@ rechoke = do
     performChokingUnchoking electedPeers peers
 
 -- | Traverse all peers and process them with a thunk.
+traversePeers :: (MonadState PeerDB m) => (PeerInfo -> m b) -> m (M.Map PeerPid b)
 traversePeers thnk = T.mapM thnk =<< gets peerMap
 
 informDone :: PieceNum -> ChokeMgrProcess ()

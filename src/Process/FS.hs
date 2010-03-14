@@ -11,12 +11,14 @@ module Process.FS
 where
 
 import Control.Concurrent
-import Control.Concurrent.CML
+import Control.Concurrent.CML.Strict
+import Control.DeepSeq
 import Control.Monad.State
 
 import qualified Data.ByteString as B
 import qualified Data.Map as M
 
+import DeepSeqInstances()
 import Process
 import Torrent
 import qualified FS
@@ -25,6 +27,9 @@ import Supervisor
 data FSPMsg = CheckPiece PieceNum (Channel (Maybe Bool))
             | WriteBlock PieceNum Block B.ByteString
             | ReadBlock PieceNum Block (Channel B.ByteString)
+
+instance NFData FSPMsg where
+  rnf a = a `seq` ()
 
 type FSPChannel = Channel FSPMsg
 
@@ -48,25 +53,25 @@ start :: FS.Handles -> FS.PieceMap -> FSPChannel -> SupervisorChan-> IO ThreadId
 start handles pm fspC supC =
     spawnP (CF fspC) (ST handles pm) (catchP (forever lp) (defaultStopHandler supC))
   where
-    lp = msgEvent >>= syncP
+    lp = {-# SCC "FS_Process" #-} msgEvent >>= syncP
     msgEvent = do
         ev <- recvPC fspCh
         wrapP ev (\msg ->
             case msg of
-                CheckPiece n ch -> do
+                CheckPiece n ch -> {-# SCC "FS_CheckPiece" #-} do
                     pm <- gets pieceMap
                     case M.lookup n pm of
                         Nothing -> sendP ch Nothing >>= syncP
                         Just pi -> do r <- gets fileHandles >>= (liftIO . FS.checkPiece pi)
                                       sendP ch (Just r) >>= syncP
-                ReadBlock n blk ch -> do
+                ReadBlock n blk ch -> {-# SCC "FS_ReadBlock" #-} do
                     debugP $ "Reading block #" ++ show n
                             ++ "(" ++ show (blockOffset blk) ++ ", " ++ show (blockSize blk) ++ ")"
                     -- TODO: Protection, either here or in the Peer code
                     h  <- gets fileHandles
                     bs <- gets pieceMap >>= (liftIO . FS.readBlock n blk h)
                     sendP ch bs >>= syncP
-                WriteBlock pn blk bs -> do
+                WriteBlock pn blk bs -> {-# SCC "FS_WriteBlock" #-} do
                     -- TODO: Protection, either here or in the Peer code
                     fh <- gets fileHandles
                     pm <- gets pieceMap

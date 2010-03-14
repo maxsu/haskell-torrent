@@ -11,7 +11,9 @@ where
 import qualified Data.Map as M
 
 import Control.Concurrent
-import Control.Concurrent.CML
+import Control.Concurrent.CML.Strict
+import Control.DeepSeq
+
 import Control.Monad.State
 import Control.Monad.Reader
 
@@ -33,6 +35,10 @@ import Torrent hiding (infoHash)
 
 data PeerMgrMsg = PeersFromTracker [Peer]
                 | NewIncoming (Handle, HostName, PortNumber)
+
+instance NFData PeerMgrMsg where
+  rnf a = a `seq` ()
+
 
 type PeerMgrChannel = Channel PeerMgrMsg
 
@@ -144,6 +150,10 @@ connect (host, port, pid, ih, pm) pool pieceMgrC fsC statC mgrC nPieces =
                      sync $ transmit pool $ SpawnNew (Supervisor $ allForOne "PeerSup" children)
                      return ()
 
+acceptor :: (Handle, HostName, PortNumber) -> InfoHash -> (InfoHash -> Bool) -> SupervisorChan
+         -> PeerId -> MgrChannel -> PieceMgrChannel -> FSPChannel -> StatusChan
+         -> PieceMap -> Int
+         -> IO ThreadId
 acceptor (h,hn,pn) ih ihTst pool pid mgrC pieceMgrC fsC statC pm nPieces =
     spawn (connector >> return ())
   where connector = do
