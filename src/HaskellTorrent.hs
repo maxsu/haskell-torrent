@@ -22,7 +22,7 @@ import qualified Protocol.BCode as BCode
 import qualified Process.Console as Console
 import qualified Process.FS as FSP
 import qualified Process.PeerMgr as PeerMgr
-import qualified Process.PieceMgr as PieceMgr (start, createPieceDb)
+import qualified Process.PieceMgr as PieceMgr (start, createPieceDb, ChokeInfoChannel)
 import qualified Process.ChokeMgr as ChokeMgr (start)
 import qualified Process.Status as Status
 import qualified Process.Tracker as Tracker
@@ -115,16 +115,13 @@ download flags name = do
            debugM "Main" (show bc)
            (handles, haveMap, pieceMap) <- openAndCheckFile bc
            -- setup channels
-           trackerC <- channel
            statusC  <- channel
            waitC    <- channel
-           pieceMgrC <- channel
            supC <- channel
-           fspC <- channel
-           statInC <- channel
            pmC <- channel
            chokeC <- channel
            chokeInfoC <- channel
+           torrentManagerC <- channel
            debugM "Main" "Created channels"
            -- setup StdGen and Peer data
            gen <- getStdGen
@@ -136,24 +133,52 @@ download flags name = do
            tid <- allForOne "MainSup"
                      (workersWatch ++
                      [ Worker $ Console.start waitC statusC
-                     , Worker $ FSP.start handles pieceMap fspC
-                     , Worker $ PeerMgr.start pmC pid (infoHash ti)
-                                    pieceMap pieceMgrC fspC chokeC statInC (pieceCount ti)
-                     , Worker $ PieceMgr.start pieceMgrC fspC chokeInfoC statInC
-                                        (PieceMgr.createPieceDb haveMap pieceMap)
-                     , Worker $ Status.start left clientState statusC statInC trackerC
-                     , Worker $ Tracker.start ti pid defaultPort statusC statInC
-                                        trackerC pmC
+                     , Worker $ PeerMgr.start pmC pid 
+                                    chokeC torrentManagerC
                      , Worker $ ChokeMgr.start chokeC chokeInfoC 100 -- 100 is upload rate in KB
                                     (case clientState of
                                         Seeding -> True
                                         Leeching -> False)
                      , Worker $ Listen.start defaultPort pmC
                      ]) supC
-           sync $ transmit trackerC Status.Start
+           startTorrent handles chokeInfoC pieceMap haveMap left clientState
+                                statusC ti pid pmC torrentManagerC
            sync $ receive waitC (const True)
            infoM "Main" "Closing down, giving processes 10 seconds to cool off"
            sync $ transmit supC (PleaseDie tid)
            threadDelay $ 10*1000000
            infoM "Main" "Done..."
            return ()
+
+startTorrent :: Handles
+                -> PieceMgr.ChokeInfoChannel
+                -> PieceMap
+                -> PiecesDoneMap
+                -> Integer
+                -> TorrentState
+                -> Channel Status.ST
+                -> TorrentInfo
+                -> PeerId
+                -> PeerMgr.PeerMgrChannel
+                -> Channel PeerMgr.ManageMsg
+                -> IO ThreadId
+startTorrent handles chokeInfoC pieceMap haveMap left clientState
+              statusC ti pid pmC torrentManagerC = do
+           fspC <- channel
+           trackerC   <- channel
+           supC       <- channel
+           chokeInfoC <- channel
+           statInC <- channel
+           pieceMgrC <- channel
+           tid <- allForOne "TorrentSup"
+                     [ Worker $ FSP.start handles pieceMap fspC
+                     , Worker $ PieceMgr.start pieceMgrC fspC chokeInfoC statInC
+                                        (PieceMgr.createPieceDb haveMap pieceMap)
+                     , Worker $ Status.start left clientState statusC statInC trackerC
+                     , Worker $ Tracker.start (infoHash ti) ti pid defaultPort statusC statInC
+                                        trackerC pmC
+                     ] supC
+           sync $ transmit torrentManagerC $ PeerMgr.NewTorrent (infoHash ti)
+                            (PeerMgr.TorrentLocal pieceMgrC fspC statInC pieceMap )
+           sync $ transmit trackerC Status.Start
+           return tid
